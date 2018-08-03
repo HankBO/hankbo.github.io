@@ -15,31 +15,30 @@
   		font-size:5;
   	  }
 
-      .axis {
+      .bar {
+        fill: steelblue;
+        stroke: white;
+        font-size: 0.7em;
+      }
+
+      .y.axis path {
+        fill: none;
+        stroke: #000;
+      }
+
+      .x.axis path {
+        display: None;
+      }
+
+      .axis line {
+        fill: none;
+        stroke: #000;
+        shape-rendering: crispEdges;
+      }
+
+      .axis text {
         font-family: arial;
         font-size: 0.6em;
-      }
-
-      path {
-        fill: none;
-        stroke: black;
-        stroke-width: 2px;
-      }
-
-      .tick {
-        fill: none;
-        stroke: black;
-      }
-
-      circle {
-        opacity: 0.4;
-        stroke: none;
-      }
-
-      .line_plot {
-        fill: none;
-        stroke: #4eb0bb;
-        stroke-width: 1px;
       }
 
       div.bottons{
@@ -58,26 +57,25 @@
     </style>
 
     <script type="text/javascript">
-      format = d3.time.format("%Y-%m-%d %H:%M:%S");
-
 
       function draw(data) {
+
         "use strict";
         var margin = 75,
-            width = 1100 - margin,
+            width = 960 - margin,
             height = 500 - margin;
 
-        var radius = 5,
-            color = 'blue';
-//            multiplier = 2;
         //head
         d3.select("body")
             .append("h2")
-            .text("Prosper Listing Creation's Time Trends");
+            .text("Risk Traits for different CreditGrade \
+            and ProsperRating listings in Prosper Loan");
 
         d3.select("body")
             .append('p')
-            .text("对图表的内容描述")
+            .text("图中对Prosper Loan上2009年以前订单的CreditGrade与2009年后的ProsperRating\
+            进行合并，按照信用等级由低到高生成柱状图。发现信用等级越高的订单，平均贷款数额越高、\
+            平均负债收入比越低，同时平均信用卡额度利用比率越低。")
 
         //svg
         var svg = d3.select("body")
@@ -89,81 +87,88 @@
 
 
         d3.select('svg')
-            .selectAll("circle")
+            .selectAll("bar")
             .data(data)
             .enter()
-            .append("circle")
+            .append("bar")
 
         //debugger;
         //gen grouped data
-        var listsby_year = d3.nest()
-                       .key(function(d) {
-                         return d['ListingCreationDate'].getUTCFullYear();
-                       })
-                       .rollup(function(v) {return v.length; })
-                       .entries(data);
+        function agg_var(leaves) {
+          var grade_count = leaves.length
+          var loan_amount = d3.mean(leaves, function(d) {
+              return d['LoanOriginalAmount']
+          });
 
-        var listsby_month = d3.nest()
-                       .key(function(d) {
-                         return d['ListingCreationDate'].getUTCMonth();
-                       })
-                       .rollup(function(v) {return v.length; })
-                       .entries(data);
+          var debt_ratio = d3.mean(leaves, function(d) {
+              return d['DebtToIncomeRatio']
+          });
 
-        var listsby_hour = d3.nest()
-                       .key(function(d) {
-                         return d['ListingCreationDate'].getUTCHours();
-                       })
-                       .rollup(function(v) {return v.length; })
-                       .entries(data);
+          var card_uti = d3.mean(leaves, function(d) {
+              return d['BankcardUtilization']
+          });
 
-        //var lists = ["listsby_year":[listsby_year],
-        //            "listsby_month":[listsby_month], "listsby_hour":[listsby_hour]];
+//          card_uti = +card_uti.toFixed(2)
 
-/*
-        var grade = d3.nest()
+          return {
+            'grade_count' : grade_count,
+            'loan_amount' : +loan_amount.toFixed(0),
+            'debt_ratio' : +debt_ratio.toFixed(2),
+            'card_uti' : card_uti };
+        }
+
+
+        var nested = d3.nest()
                        .key(function(d) {
                          return d['credit_and_prosper_grade'];
                        })
-                       .rollup(function(v) {return v.length; })
-                       .entries(data);
+                       .sortKeys(d3.descending)
+                       .rollup(agg_var)
+                       .entries(data)
+                       .filter(function(d) {return d.key !='NC' && d.key !=''});
 
-        //var jobstatus = d3.nest()
-                       .key(function(d) {
-                         return d['EmploymentStatus'];
-                       })
-                       .rollup(function(v) {return v.length; })
-                       .entries(data);
-*/
         debugger;
-
+/*
+        function todateformat(datelist, formatinput) {
+            var i=0,len=datelist.length
+            for (;i<len;i++) {
+                datelist[i].key = formatinput.parse(datelist[i].key)
+            }
+        }
+*/
         //x and y scale
-        var x_extent = d3.extent(listsby_year, function(d) {
-            return d.key;
-        });
+        //["A", "HR"]
+//        var x_extent = d3.extent(nested, function(d) {
+//            return d.key;
+//        });
 
-        var x_scale = d3.scale.linear()
-            .range([margin, width])
-            .domain(x_extent);
+        var x_scale = d3.scale.ordinal()
+            .rangeBands([margin, width], 0.5, 0.5)
+            .domain(nested.map(function(e) {return e.key}));
 
-        var y_extent = d3.extent(listsby_year, function(d) {
-            return d.values;
+        var y_maxextent = d3.max(nested, function(d) {
+          return d.values['grade_count']
         });
 
         var y_scale = d3.scale.linear()
             .range([height, margin])
-            .domain(y_extent);
+            .domain([0, y_maxextent]);
 
         // x and y axis
         var x_axis_gen = d3.svg.axis()
             .scale(x_scale)
-            .ticks(9);
+            .orient("bottom");
 
         var x_axis = d3.select("svg")
             .append('g')
             .attr('class', 'x axis')
             .attr('transform', "translate(0," + height + ")")
             .call(x_axis_gen);
+
+        var x_axis_text = x_axis.append("text")
+            .text("CreditGrade and ProsperRating")
+            .attr("x", width*0.5)
+            .attr("y", 30);
 
         var y_axis_gen = d3.svg.axis()
             .scale(y_scale)
@@ -176,146 +181,112 @@
             .call(y_axis_gen);
 
         var y_axis_text = y_axis.append("text")
-            .text("Num of Listings")
-            .attr("x",5)
-            .attr("y",70)
-            .attr("dy","1em");
+            .text("Count")
+            .attr("x", 5)
+            .attr("y", margin);
 
-        //circle
-        var circle_groups = svg.selectAll('.circle')
-            .data(listsby_year)
+        //bar
+        var bar_group = svg.selectAll('rect')
+            .data(nested)
             .enter()
             .append('g')
-            .attr('class', 'circle')
+            .attr('class', 'bar')
 
-        var circles = circle_groups.append('circle')
-            .attr('cx', function(d) {
+        var bars = bar_group.append('rect')
+            .attr('x', function(d) {
                 return x_scale(d.key);
             })
-
-            .attr('cy', function(d) {
-                return y_scale(d.values);
+            .attr('y', function(d) {
+                return y_scale(d.values['grade_count']);
             })
-            .attr('r', radius)
-            .attr('fill', color);
+            .attr('width', x_scale.rangeBand())
+            .attr('height', function(d) { return height - y_scale(d.values['grade_count']); });
 
 
-        //text under circle groups
-		    var texts = circle_groups.append('text')
+        //text under bar groups
+		    var texts = bar_group.append('text')
 			      .text(function(d) {
-                return d.values;
+                return d.values['grade_count'];
             })
 			      .attr("x",function(d) {
-                return x_scale(d.key);
+                return x_scale(d.key)+10;
             })
 			      .attr("y",function(d) {
-                return y_scale(d.values)-10;
+                return y_scale(d.values['grade_count'])+15;
             })
 			      .attr("visibility", "hidden");
 
-		    //circle group activity
-		    circle_groups.on("mouseover", function(d){
+        debugger;
+
+		    //bar group activity
+		    bar_group.on("mouseover", function(d){
 				    this.getElementsByTagName('text')[0].style.visibility = "visible"
-			  })
+            this.getElementsByTagName('rect')[0].style.fill = "brown"
+})
 			      .on("mouseout", function(d){
 			      this.getElementsByTagName('text')[0].style.visibility = "hidden"
+            this.getElementsByTagName('rect')[0].style.fill = "steelblue"
 			  });
-
-		    //line generator
-		    var line_generator = d3.svg.line()
-			      .x(function(d){
-				    return x_scale(d.key);
-			  })
-			      .y(function(d){
-				    return y_scale(d.values);
-			  });
-		    //line
-		    var line = svg.append("path")
-			      .attr('d', line_generator(listsby_year))
-			      .attr('stroke', 'green')
-			      .attr('stroke-width', 2)
-			      .attr('fill', 'none');
 
         //debugger;
 
         //update
-    function update_axis(metric) {
-        y_extent = d3.extent(listsby_month, function(d){
-            return d.values;
-        })
-        x_extent = d3.extent(listsby_month, function(d){
-            return d.key;
-        })
-        y_scale = d3.scale.linear()
-            .range([height, margin])
-            .domain(y_extent)
-        x_scale = d3.scale.linear()
-            .range([margin, width])
-            .domain(x_extent)
-        y_axis_gen = d3.svg.axis()
-            .scale(y_scale)
-            .orient("left")
-        x_axis_gen = d3.svg.axis()
-            .scale(x_scale)
-            .ticks(11);
-        x_axis.transition()
-            .duration(500)
-            .call(x_axis_gen)
-        y_axis_gen = d3.svg.axis()
-            .scale(y_scale)
-            .orient("left")
-        y_axis.transition()
-            .duration(500)
-            .call(y_axis_gen)
+        function update_axis(metric) {
+          y_maxextent = d3.max(nested, function(d) {
+            return d.values[metric]
+          });
 
-    }
+          y_scale = d3.scale.linear()
+              .range([height, margin])
+              .domain([0, y_maxextent]);
 
-    function update_circles(metric) {
-        circles.transition()
-            .duration(500)
-            .attr("cx", function(d) {
-                return x_scale(d.key);
-            })
-            .attr("cy", function(d) {
-                return y_scale(d.values);
-            })
-        texts.text(function(d) {
-                return x_scale(d.key);
-            })
-            .attr("x", function(d) {
-                return x_scale(d.key);
-            })
-            .attr("y", function(d) {
-                return y_scale(d.values)-10;
-            })
-            .attr("visibility", "hidden");
-    }
+          y_axis_gen = d3.svg.axis()
+              .scale(y_scale)
+              .orient("left")
 
-    function update_line(metric) {
-        line_generator = d3.svg.line()
-            .x(function(d) {
-                return x_scale(d.key);
-            })
-            .y(function(d) {
-                return y_scale(d.values);
-            })
-            line.transition()
-                .duration(500)
-                .attr('d', line_generator(listsby_month))
-                .attr('stroke', 'green')
-                .attr('stroke-width', 2)
-                .attr('fill', 'none');
-    }
+          y_axis.transition()
+              .duration(500)
+              .call(y_axis_gen)
 
-    function update(metric) {
-            update_axis(metric);
-            update_circles(metric);
-            update_line(metric);
-    }
+        }
 
-        var metriclist = [{"btn_text":"Year Trends", "list":"listsby_year"},
-                          {"btn_text":"Month Trends", "list":"listsby_month"},
-                          {"btn_text":"Hour Trends", "list":"listsby_hour"}];
+        function update_bars(metric) {
+          bars.transition()
+              .duration(500)
+              .attr("y", function(d) {
+                  return y_scale(d.values[metric]);
+              })
+              .attr('height', function(d) { return height - y_scale(d.values[metric]); });
+
+          texts.text(function(d) {
+              return d.values[metric];
+          })
+              .attr("x", function(d) {
+                return x_scale(d.key)+10;
+              })
+              .attr("y", function(d) {
+                return y_scale(d.values[metric])+15;
+              })
+              .attr("visibility", "hidden");
+        }
+
+        function update_unit(unit) {
+            y_axis_text.transition()
+              .duration(500)
+              .text(unit)
+              .attr("x", 5)
+              .attr("y", margin);
+        }
+
+        function update(metric) {
+              update_axis(metric);
+              update_bars(metric);
+        }
+
+        var metriclist = [{"btn_text":"Listings Count", "content":"grade_count", "unit":"Count"},
+                          {"btn_text":"Average Loan Amount", "content":"loan_amount", "unit":"Dollar"},
+                          {"btn_text":"Average Debt To Income Ratio", "content":"debt_ratio", "unit":"Ratio"},
+                          {"btn_text":"Average Bankcard Utilization", "content":"card_uti", "unit":"Ratio"}];
 
         //button
         var buttons = d3.select("body")
@@ -348,7 +319,8 @@
                 .duration(500)
                 .style("background", "lightBlue")
                 .style("color", "white");
-            update(d["list"]);
+            update(d["content"])
+            update_unit(d["unit"]);
         });
 
       };
@@ -358,10 +330,10 @@
     <script type="text/javascript">
 
     d3.csv("prosperloan_reduced.csv", function(d) {
-        //d['ProsperPaymentsOneMonthPlusLate'] = +d['ProsperPaymentsOneMonthPlusLate'];
-        d['ListingCreationDate'] = format.parse(d['ListingCreationDate'].slice(0, 19));
-        //debugger;
-        return d;
+        d['LoanOriginalAmount'] = +d['LoanOriginalAmount'];
+        d['DebtToIncomeRatio'] = +d['DebtToIncomeRatio'];
+        d['BankcardUtilization'] = +d['BankcardUtilization'];
+          return d;
       }, draw);
     </script>
   </body>
